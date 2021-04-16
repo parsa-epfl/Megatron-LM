@@ -12,6 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# This file is modified to enable Hybrid Block Floating-Point training.
+# For more information about the project, see
+# https://github.com/parsa-epfl/HBFP_Emulator.
+#
+# Modifications Copyright (c) 2021, Parallel Systems Architecture Lab, EPFL
+# All rights reserved.
+
 
 """Transformer based language model."""
 
@@ -25,17 +33,23 @@ from megatron.model.enums import LayerType, AttnMaskType
 from megatron.model.transformer import ParallelTransformer
 from megatron.model.utils import get_linear_layer
 from megatron.model.utils import init_method_normal, scaled_init_method_normal
+from megatron.bfp.bfp_ops import F_linear_bfp
 
 def parallel_lm_logits(input_, word_embeddings_weight, parallel_output,
                        bias=None):
     """LM logits using word embedding weights."""
     # Parallel logits.
     input_parallel = mpu.copy_to_tensor_model_parallel_region(input_)
+    args = get_args()
+    linear = F_linear_bfp(
+        num_format=args.hbfp_num_format,
+        mant_bits=args.hbfp_mant_bits,
+        weight_mant_bits=args.hbfp_weight_mant_bits)
     # Matrix multiply.
     if bias is None:
-        logits_parallel = F.linear(input_parallel, word_embeddings_weight)
+        logits_parallel = linear(input_parallel, word_embeddings_weight)
     else:
-        logits_parallel = F.linear(input_parallel, word_embeddings_weight, bias)
+        logits_parallel = linear(input_parallel, word_embeddings_weight) + bias
     # Gather if needed.
     if parallel_output:
         return logits_parallel
@@ -90,7 +104,8 @@ class Pooler(MegatronModule):
 
     def __init__(self, hidden_size, init_method):
         super(Pooler, self).__init__()
-        self.dense = get_linear_layer(hidden_size, hidden_size, init_method)
+        args = get_args()
+        self.dense = get_linear_layer(hidden_size, hidden_size, init_method, args)
 
     def forward(self, hidden_states, sequence_index=0):
         # hidden_states: [b, s, h]

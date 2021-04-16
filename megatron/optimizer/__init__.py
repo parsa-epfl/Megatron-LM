@@ -12,6 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# This file is modified to enable Hybrid Block Floating-Point training.
+# For more information about the project, see
+# https://github.com/parsa-epfl/HBFP_Emulator.
+#
+# Modifications Copyright (c) 2021, Parallel Systems Architecture Lab, EPFL
+# All rights reserved.
+
 
 from apex.optimizers import FusedAdam as Adam
 from apex.optimizers import FusedSGD as SGD
@@ -21,6 +29,7 @@ from megatron.model import LayerNorm
 
 from .grad_scaler import ConstantGradScaler, DynamicGradScaler
 from .optimizer import Float16OptimizerWithFloat16Params, FP32Optimizer
+from megatron.bfp.bfp_optim import get_bfp_optim
 
 
 def _get_params_for_weight_decay_optimization(modules):
@@ -53,11 +62,15 @@ def get_megatron_optimizer(model):
     # Base optimizer.
     param_groups = _get_params_for_weight_decay_optimization(model)
     if args.optimizer == 'adam':
-        optimizer = Adam(param_groups,
-                         lr=args.lr,
-                         weight_decay=args.weight_decay,
-                         betas=(args.adam_beta1, args.adam_beta2),
-                         eps=args.adam_eps)
+        AdamBFP = get_bfp_optim(Adam, "Adam")
+        optimizer = AdamBFP(
+            param_groups,
+            lr=args.lr, weight_decay=args.weight_decay,
+            betas=(args.adam_beta1, args.adam_beta2),
+            eps=args.adam_eps,
+            num_format=args.hbfp_num_format,
+            mant_bits=args.hbfp_mant_bits,
+            weight_mant_bits=args.hbfp_weight_mant_bits)
     elif args.optimizer == 'sgd':
         optimizer = SGD(param_groups,
                         lr=args.lr,

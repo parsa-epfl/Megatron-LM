@@ -16,6 +16,14 @@
 
 # Parts of the code here are adapted from PyTorch
 # repo: https://github.com/pytorch/pytorch
+#
+# This file is modified to enable Hybrid Block Floating-Point training.
+# For more information about the project, see
+# https://github.com/parsa-epfl/HBFP_Emulator.
+#
+# Modifications Copyright (c) 2021, Parallel Systems Architecture Lab, EPFL
+# All rights reserved.
+
 
 
 import math
@@ -36,6 +44,7 @@ from .utils import divide
 from .utils import split_tensor_along_last_dim
 from .utils import VocabUtility
 from megatron import get_args
+from megatron.bfp.bfp_ops import F_linear_bfp
 
 
 _MODEL_PARALLEL_ATTRIBUTE_DEFAULTS = {'tensor_model_parallel': False,
@@ -218,7 +227,7 @@ class ColumnParallelLinear(torch.nn.Module):
                                      set to False. It returns the master weights
                                      used for initialization.
         skip_bias_add: This was added to enable performance optimations where bias
-                       can be fused with other elementwise operations. we skip 
+                       can be fused with other elementwise operations. we skip
                        adding bias but instead return it.
     """
 
@@ -228,6 +237,11 @@ class ColumnParallelLinear(torch.nn.Module):
                  skip_bias_add=False):
         super(ColumnParallelLinear, self).__init__()
 
+        args = get_args()
+        self.linear_F = F_linear_bfp(
+            num_format=args.hbfp_num_format,
+            mant_bits=args.hbfp_mant_bits,
+            weight_mant_bits=args.hbfp_weight_mant_bits)
         # Keep input parameters
         self.input_size = input_size
         self.output_size = output_size
@@ -241,7 +255,6 @@ class ColumnParallelLinear(torch.nn.Module):
         # Note: torch.nn.functional.linear performs XA^T + b and as a result
         # we allocate the transpose.
         # Initialize weight.
-        args = get_args()
         if args.use_cpu_initialization:
             self.weight = Parameter(torch.empty(self.output_size_per_partition,
                                                 self.input_size,
@@ -256,7 +269,7 @@ class ColumnParallelLinear(torch.nn.Module):
                 device=torch.cuda.current_device(), dtype=args.params_dtype))
             _initialize_affine_weight_gpu(self.weight, init_method,
                                           partition_dim=0, stride=stride)
-            
+
         if bias:
             if args.use_cpu_initialization:
                 self.bias = Parameter(torch.empty(
@@ -281,12 +294,12 @@ class ColumnParallelLinear(torch.nn.Module):
         # Matrix multiply.
 
         bias = self.bias if not self.skip_bias_add else None
-        output_parallel = F.linear(input_parallel, self.weight, bias)
+        output_parallel = self.linear_F(input_parallel, self.weight) + self.bias
         if self.gather_output:
             # All-gather across the partitions.
             output = gather_from_tensor_model_parallel_region(output_parallel)
         else:
-            output = output_parallel 
+            output = output_parallel
         output_bias = self.bias if self.skip_bias_add else None
         return output, output_bias
 
@@ -317,7 +330,7 @@ class RowParallelLinear(torch.nn.Module):
                                      set to False. It returns the master weights
                                      used for initialization.
         skip_bias_add: This was added to enable performance optimations where bias
-                       can be fused with other elementwise operations. we skip 
+                       can be fused with other elementwise operations. we skip
                        adding bias but instead return it.
     """
 
@@ -328,6 +341,11 @@ class RowParallelLinear(torch.nn.Module):
                  skip_bias_add=False):
         super(RowParallelLinear, self).__init__()
 
+        args = get_args()
+        self.linear_F = F_linear_bfp(
+            num_format=args.hbfp_num_format,
+            mant_bits=args.hbfp_mant_bits,
+            weight_mant_bits=args.hbfp_weight_mant_bits)
         # Keep input parameters
         self.input_size = input_size
         self.output_size = output_size
@@ -341,7 +359,6 @@ class RowParallelLinear(torch.nn.Module):
         # Note: torch.nn.functional.linear performs XA^T + b and as a result
         # we allocate the transpose.
         # Initialize weight.
-        args = get_args()
         if args.use_cpu_initialization:
             self.weight = Parameter(torch.empty(self.output_size,
                                                 self.input_size_per_partition,
@@ -379,7 +396,7 @@ class RowParallelLinear(torch.nn.Module):
         else:
             input_parallel = scatter_to_tensor_model_parallel_region(input_)
         # Matrix multiply.
-        output_parallel = F.linear(input_parallel, self.weight)
+        output_parallel = self.linear_F(input_parallel, self.weight)
         # All-reduce across all the partitions.
         output_ = reduce_from_tensor_model_parallel_region(output_parallel)
         if not self.skip_bias_add:
@@ -389,4 +406,3 @@ class RowParallelLinear(torch.nn.Module):
             output = output_
             output_bias = self.bias
         return output, output_bias
-

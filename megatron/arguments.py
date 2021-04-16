@@ -12,6 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# This file is modified to enable Hybrid Block Floating-Point training.
+# For more information about the project, see
+# https://github.com/parsa-epfl/HBFP_Emulator.
+#
+# Modifications Copyright (c) 2021, Parallel Systems Architecture Lab, EPFL
+# All rights reserved.
 
 """Megatron arguments."""
 
@@ -26,6 +33,7 @@ def parse_args(extra_args_provider=None, defaults={},
     parser = argparse.ArgumentParser(description='Megatron-LM Arguments',
                                      allow_abbrev=False)
 
+    parse  = _add_hbfp_args(parser)
     # Standard arguments.
     parser = _add_network_size_args(parser)
     parser = _add_regularization_args(parser)
@@ -149,11 +157,11 @@ def parse_args(extra_args_provider=None, defaults={},
               flush=True)
 
     # If we do accumulation and all-reduces in fp32, we need to have
-    # local DDP and we should set the use-contiguous-buffers-in-ddp. 
+    # local DDP and we should set the use-contiguous-buffers-in-ddp.
     if args.accumulate_allreduce_grads_in_fp32:
         assert args.DDP_impl == 'local'
         args.use_contiguous_buffers_in_ddp = True
-        
+
     if args.dataloader_type is None:
         args.dataloader_type = 'single'
 
@@ -212,7 +220,7 @@ def parse_args(extra_args_provider=None, defaults={},
     else:
         assert args.encoder_seq_length is not None
         args.seq_length = args.encoder_seq_length
- 
+
     assert args.hidden_size % args.num_attention_heads == 0
     if args.seq_length is not None:
         assert args.max_position_embeddings >= args.seq_length
@@ -747,4 +755,16 @@ def _add_vit_args(parser):
     group.add_argument('--patch-dim', type=int, default=16,
                        help='patch dimension used in vit')
 
+    return parser
+
+
+def _add_hbfp_args(parser):
+    group = parser.add_argument_group(title='hbfp')
+
+    parser.add_argument('--hbfp_num_format', default='fp32', type=str,
+                        help='number format for fully connected and convolutional layers')
+    parser.add_argument('--hbfp_mant_bits', default=8, type=int,
+                        help='Mantissa bits for bfp')
+    parser.add_argument('--hbfp_weight_mant_bits', default=0, type=int,
+                        help='Mantissa bits for weights bfp')
     return parser

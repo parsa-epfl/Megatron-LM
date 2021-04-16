@@ -12,6 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# This file is modified to enable Hybrid Block Floating-Point training.
+# For more information about the project, see
+# https://github.com/parsa-epfl/HBFP_Emulator.
+#
+# Modifications Copyright (c) 2021, Parallel Systems Architecture Lab, EPFL
+# All rights reserved.
+
 
 """Classification model."""
 
@@ -58,7 +66,8 @@ class Classification(MegatronModule):
             self.classification_dropout = torch.nn.Dropout(args.hidden_dropout)
             self.classification_head = get_linear_layer(args.hidden_size,
                                                         self.num_classes,
-                                                        init_method)
+                                                        init_method,
+                                                        args)
             self._classification_head_key = 'classification_head'
 
     def set_input_tensor(self, input_tensor):

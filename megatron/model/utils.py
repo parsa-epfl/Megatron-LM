@@ -12,6 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# This file is modified to enable Hybrid Block Floating-Point training.
+# For more information about the project, see
+# https://github.com/parsa-epfl/HBFP_Emulator.
+#
+# Modifications Copyright (c) 2021, Parallel Systems Architecture Lab, EPFL
+# All rights reserved.
+
 
 """Utilities for models."""
 
@@ -20,6 +28,7 @@ import math
 import torch
 
 from megatron import get_args
+from megatron.bfp.bfp_ops import BFPLinear
 
 def init_method_normal(sigma):
     """Init method based on N(0, sigma)."""
@@ -44,9 +53,11 @@ def attention_mask_func(attention_scores, attention_mask):
     return attention_scores
 
 
-def get_linear_layer(rows, columns, init_method):
+def get_linear_layer(rows, columns, init_method, args):
     """Simple linear layer with weight initialization."""
-    layer = torch.nn.Linear(rows, columns)
+    layer = BFPLinear(rows, columns, num_format=args.hbfp_num_format,
+                  mant_bits=args.hbfp_mant_bits,
+                  weight_mant_bits=args.hbfp_weight_mant_bits)
     init_method(layer.weight)
     with torch.no_grad():
         layer.bias.zero_()

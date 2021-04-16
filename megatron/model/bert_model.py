@@ -12,6 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# This file is modified to enable Hybrid Block Floating-Point training.
+# For more information about the project, see
+# https://github.com/parsa-epfl/HBFP_Emulator.
+#
+# Modifications Copyright (c) 2021, Parallel Systems Architecture Lab, EPFL
+# All rights reserved.
+
 
 """BERT model."""
 
@@ -77,7 +85,7 @@ class BertLMHead(MegatronModule):
         mpu.set_tensor_model_parallel_attributes(self.bias, True, 0, 1)
         self.parallel_output = parallel_output
 
-        self.dense = get_linear_layer(hidden_size, hidden_size, init_method)
+        self.dense = get_linear_layer(hidden_size, hidden_size, init_method, args)
         self.layernorm = LayerNorm(hidden_size, eps=layernorm_epsilon)
         self.gelu = torch.nn.functional.gelu
         if args.openai_gelu:
@@ -161,7 +169,7 @@ class BertModel(MegatronModule):
             self.binary_head = None
             if self.add_binary_head:
                 self.binary_head = get_linear_layer(args.hidden_size, 2,
-                                                    init_method)
+                                                    init_method, args)
                 self._binary_head_key = 'binary_head'
 
     def set_input_tensor(self, input_tensor):
