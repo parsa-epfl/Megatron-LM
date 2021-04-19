@@ -21,8 +21,9 @@
 # For more information about the project, see
 # https://github.com/parsa-epfl/HBFP_Emulator.
 #
-# Modifications Copyright (c) 2021, Parallel Systems Architecture Lab, EPFL
-# All rights reserved.
+# Modifications
+# Copyright (c) 2021, Parallel Systems Architecture Laboratory (PARSA), EPFL &
+# Machine Learning and Optimization Laboratory (MLO), EPFL. All rights reserved.
 
 
 
